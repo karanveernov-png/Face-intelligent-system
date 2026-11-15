@@ -31,10 +31,10 @@ This project's pinned FastAPI/Starlette version needs both `httpx` and
 rerun `pip install -r requirements.txt`.
 
 **Webcam not available / camera permission errors**
-Webcam capture is not implemented yet in this build — see the top-level
-`README.md`, "Next Phase". `cv2.VideoCapture(0)` is the function you'd call
-to add it; the honest reason it isn't here yet is explained in the README
-rather than silently stubbed out.
+Webcam capture is started only after clicking **Start webcam** in the
+dashboard. Open the frontend through `http://127.0.0.1:5173` or
+`http://localhost:5173`, allow camera access in the browser, and confirm that
+the backend is running on port `8000`.
 
 ## Why there are no real face images in `samples/`
 
@@ -78,8 +78,7 @@ default `0.5` threshold.
   produces: both eyes, nose, both mouth corners — see `MODEL_CARDS.md`).
   A 68-point model (e.g. dlib's shape predictor) would need its own
   weights and wasn't pursued — see `CHANGELOG.md` for what *was* closed.
-- No webcam streaming endpoint yet.
-- No frontend yet.
+- Webcam streaming requires an explicitly granted browser camera permission.
 - Tracker is IoU-only — no motion prediction, so a fast-moving face or a
   long occlusion can lose its track ID and start a new one.
 - `/api/faces/enroll` requires exactly one face in the image; it doesn't

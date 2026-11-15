@@ -36,7 +36,7 @@ not as a feature that does consent-collection for you.
 | Enrolled face **embedding** (512 numbers) | Yes | `data/embeddings/index.json` | What matching actually compares against. |
 | Enrolled face **image** | **No, by default** | `data/gallery/<id>.jpg` | Only written if `settings.retain_enrollment_images = True`. Off by default per the master spec's "store embeddings rather than retaining original enrollment images when practical". |
 | Uploaded images/videos for one-off analysis | No | `data/tmp_uploads/` | Written to disk only for the duration of request processing, then deleted via the validation layer's cleanup (see `security/validation.py`). |
-| Anything from a webcam stream | Not implemented yet | — | See README "Next Phase" — this needs explicit, visible permission UI before it's built, not just a backend endpoint. |
+| Anything from a webcam stream | No | — | Frames are analyzed in memory during an explicitly started webcam session and are not enrolled or retained by the stream itself. |
 
 An embedding is **not reversible back into a photo** by this project's code
 — ArcFace is a one-way feature extractor — but that does not make it

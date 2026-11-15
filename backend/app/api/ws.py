@@ -9,8 +9,7 @@ Implements the Pipeline Performance Strategy for live video streams:
      via `cv2.dnn.blobFromImages` for single-pass ONNX Runtime inference.
 
 Security:
-  - Requires authentication during WebSocket handshake
-  - Token validated before connection accepted
+  - Configured browser origins are checked before accepting a connection
   - Rate limiting on frames per second
   - Connection limits
 """
@@ -24,7 +23,7 @@ from typing import Optional
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 
 try:
     import websockets.exceptions
@@ -38,16 +37,6 @@ except ImportError:
     _WS_CLOSED_EXCEPTIONS = (WebSocketDisconnect, RuntimeError)
 
 from app.core.config import settings
-from app.security.auth import (
-    APIKeyRecord,
-    AuthContext,
-    Permission,
-    _api_keys,
-    _hash_api_key,
-    _verify_api_key,
-    get_auth_context,
-    require_permission,
-)
 from app.security.validation import reject_oversized_decoded_image
 from app.services import pipeline
 from app.services.tracking import FaceTracker
@@ -68,69 +57,12 @@ _active_connections: dict[str, dict] = {}  # client_id -> connection info
 router = APIRouter()
 
 
-async def authenticate_websocket(websocket: WebSocket, token: Optional[str]) -> AuthContext:
-    """
-    Authenticate WebSocket connection during handshake.
-    Raises HTTPException if authentication fails (causes handshake rejection).
-    """
+async def validate_websocket_origin(websocket: WebSocket) -> None:
+    """Reject browser origins that are not configured for the local app."""
     origin = websocket.headers.get("origin")
     if origin and origin not in settings.get_cors_origins_list():
         logger.warning("WebSocket: Disallowed origin attempted: %s", origin)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="WebSocket origin is not allowed",
-        )
-
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token required. Provide via 'token' query parameter."
-        )
-
-    # Validate token
-    key_hash = _hash_api_key(token)
-    record: Optional[APIKeyRecord] = _api_keys.get(key_hash)
-
-    if not record:
-        logger.warning("WebSocket: Invalid token attempted")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token"
-        )
-
-    if record.revoked:
-        logger.warning("WebSocket: Revoked token attempted: %s", record.name)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token has been revoked"
-        )
-
-    if record.expires_at and time.time() > record.expires_at:
-        logger.warning("WebSocket: Expired token attempted: %s", record.name)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token has expired"
-        )
-
-    # Check permission for stream analysis
-    from app.security.auth import ROLE_PERMISSIONS
-    permissions = ROLE_PERMISSIONS.get(record.role, set())
-    if Permission.ANALYZE_STREAM not in permissions:
-        logger.warning("WebSocket: Insufficient permissions for %s: %s", record.name, record.role.value)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions for stream analysis"
-        )
-
-    # Update last used
-    record.last_used_at = time.time()
-
-    return AuthContext(
-        api_key_name=record.name,
-        role=record.role,
-        permissions=permissions,
-        key_record=record,
-    )
+        raise ValueError("WebSocket origin is not allowed")
 
 
 def check_connection_limits(client_ip: str) -> bool:
@@ -147,12 +79,10 @@ def check_connection_limits(client_ip: str) -> bool:
     return True
 
 
-def register_connection(client_id: str, client_ip: str, auth: Optional[AuthContext] = None) -> None:
+def register_connection(client_id: str, client_ip: str) -> None:
     """Register a new WebSocket connection."""
     _active_connections[client_id] = {
         "client_ip": client_ip,
-        "auth_name": (auth.api_key_name if auth else None),
-        "role": (auth.role.value if auth else None),
         "connected_at": time.time(),
         "last_frame_at": time.time(),
         "frame_count": 0,
@@ -189,7 +119,6 @@ async def analyze_stream(
     run_recognition: bool = Query(True),
     run_expression: bool = Query(True),
     run_age: bool = Query(False),
-    token: Optional[str] = Query(None),
 ):
     """
     WebSocket endpoint for live webcam analysis.
@@ -212,13 +141,9 @@ async def analyze_stream(
     client_id = f"{client_ip}:{id(websocket)}"
 
     try:
-        auth = await authenticate_websocket(websocket, token)
-    except HTTPException as exc:
-        logger.warning("WebSocket authentication failed: %s", exc.detail)
-        await websocket.close(
-            code=status.WS_1008_POLICY_VIOLATION,
-            reason=str(exc.detail),
-        )
+        await validate_websocket_origin(websocket)
+    except ValueError as exc:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(exc))
         return
 
     # Check connection limits before accepting
@@ -228,7 +153,7 @@ async def analyze_stream(
 
     # Accept the connection
     await websocket.accept()
-    register_connection(client_id, client_ip, auth)
+    register_connection(client_id, client_ip)
 
     logger.info(
         "WebSocket connected: client_id=%s client_ip=%s",
@@ -382,7 +307,6 @@ async def analyze_stream(
 
 @router.get("/ws/stats")
 def websocket_stats(
-    _auth: AuthContext = Depends(require_permission(Permission.ADMIN_CONFIG)),
 ):
     """
     Get WebSocket connection statistics.
@@ -393,8 +317,6 @@ def websocket_stats(
             {
                 "client_id": cid,
                 "client_ip": info["client_ip"],
-                "auth_name": info["auth_name"],
-                "role": info["role"],
                 "connected_duration": time.time() - info["connected_at"],
                 "frames_received": info["frame_count"],
             }

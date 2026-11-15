@@ -1,7 +1,5 @@
 import type { AnalyzeOptions, WsServerMessage } from "../types/api";
 
-const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
-
 /**
  * Owns the three things "webcam mode" actually needs, kept separate from any
  * React component so they're independently testable/reasoned about:
@@ -57,11 +55,7 @@ export class WebcamSession {
     this.canvas.width = this.video.videoWidth || 640;
     this.canvas.height = this.video.videoHeight || 480;
 
-    if (!API_KEY) {
-      throw new Error("VITE_API_KEY is not configured for this frontend build.");
-    }
     const params = new URLSearchParams(this.serializeOptions(this.options));
-    params.set("token", API_KEY);
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     this.socket = new WebSocket(`${wsProtocol}//${window.location.host}/ws/analyze?${params}`);
 

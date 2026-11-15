@@ -1,8 +1,8 @@
 """
 AI Face Intelligence System - FastAPI Application Entry Point
 
-Production-ready configuration with authentication, security headers,
-structured logging, and health checks.
+Local FastAPI application with security headers, structured logging, and health
+checks.
 """
 from __future__ import annotations
 
@@ -21,8 +21,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api.routes import router
 from app.api.ws import router as ws_router
 from app.core.config import DATA_DIR, MODELS_DIR, settings
-from app.security.auth import load_api_keys_from_env
-from app.security.model_integrity import verify_model_integrity, generate_manifest, save_manifest
+from app.security.model_integrity import verify_model_integrity
 
 # ============================================================
 # Structured Logging Setup
@@ -104,10 +103,6 @@ async def lifespan(app: FastAPI):
     # Startup
     app_logger.info("Starting Face Intelligence System", version=settings.app_version, environment=settings.environment)
 
-    # Load API keys from environment
-    key_count = load_api_keys_from_env()
-    app_logger.info("Loaded API keys from environment", count=key_count)
-
     # Validate production configuration
     if settings.environment == "production":
         issues = settings.validate_production_config()
@@ -123,9 +118,6 @@ async def lifespan(app: FastAPI):
                     "Production configuration is invalid: "
                     + "; ".join(critical_issues)
                 )
-        if key_count == 0:
-            raise RuntimeError("FACE_API_KEYS must define at least one API key in production")
-
     # Initialize encryption
     if settings.encryption_key:
         try:

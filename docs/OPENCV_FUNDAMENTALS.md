@@ -241,8 +241,8 @@ was the right first choice here.
 
 **Experiment**: run `tests/test_tracking.py::test_same_face_across_frames_keeps_same_track_id`
 and step through it — a face that moves slightly each frame keeps the
-same `track_id`; see section "Next Phase" in the README for what breaks
-this (fast motion, or a face that briefly leaves frame for too many
+same `track_id`; see the README's troubleshooting and limitations sections
+for what breaks this (fast motion, or a face that briefly leaves frame for too many
 frames — `settings.tracker_max_missed_frames`).
 
 ## 15. CPU performance and optimization
