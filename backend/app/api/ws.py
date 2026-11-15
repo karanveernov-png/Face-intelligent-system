@@ -46,6 +46,7 @@ from app.security.auth import (
     _hash_api_key,
     _verify_api_key,
     get_auth_context,
+    require_permission,
 )
 from app.security.validation import reject_oversized_decoded_image
 from app.services import pipeline
@@ -72,6 +73,14 @@ async def authenticate_websocket(websocket: WebSocket, token: Optional[str]) -> 
     Authenticate WebSocket connection during handshake.
     Raises HTTPException if authentication fails (causes handshake rejection).
     """
+    origin = websocket.headers.get("origin")
+    if origin and origin not in settings.get_cors_origins_list():
+        logger.warning("WebSocket: Disallowed origin attempted: %s", origin)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="WebSocket origin is not allowed",
+        )
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -180,6 +189,7 @@ async def analyze_stream(
     run_recognition: bool = Query(True),
     run_expression: bool = Query(True),
     run_age: bool = Query(False),
+    token: Optional[str] = Query(None),
 ):
     """
     WebSocket endpoint for live webcam analysis.
@@ -201,6 +211,16 @@ async def analyze_stream(
     client_ip = websocket.client.host if websocket.client else "unknown"
     client_id = f"{client_ip}:{id(websocket)}"
 
+    try:
+        auth = await authenticate_websocket(websocket, token)
+    except HTTPException as exc:
+        logger.warning("WebSocket authentication failed: %s", exc.detail)
+        await websocket.close(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason=str(exc.detail),
+        )
+        return
+
     # Check connection limits before accepting
     if not check_connection_limits(client_ip):
         await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER, reason="Connection limit exceeded")
@@ -208,7 +228,7 @@ async def analyze_stream(
 
     # Accept the connection
     await websocket.accept()
-    register_connection(client_id, client_ip, None)
+    register_connection(client_id, client_ip, auth)
 
     logger.info(
         "WebSocket connected: client_id=%s client_ip=%s",
@@ -361,7 +381,9 @@ async def analyze_stream(
 
 
 @router.get("/ws/stats")
-def websocket_stats():
+def websocket_stats(
+    _auth: AuthContext = Depends(require_permission(Permission.ADMIN_CONFIG)),
+):
     """
     Get WebSocket connection statistics.
     """

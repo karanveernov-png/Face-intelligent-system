@@ -12,9 +12,9 @@ hsemotion-onnx>=0.3.1
 # models' own 5-point chip alignment. age_estimation.py no longer loads those
 # models -- see its module docstring -- so nothing in app/ imports dlib
 # anymore, and the dependency was removed. `uniface` is needed only by
-# scripts/download_models.py, to fetch FairFace's weights; install it
-# separately with `pip install uniface` if you run that script, it is not a
-# runtime dependency of the backend itself.)
+# scripts/download_models.py, to fetch FairFace's weights; install the
+# provisioning-only dependencies from requirements-models.txt when running
+# that script. It is not a runtime dependency of the backend itself.)
 
 # Security / Cryptography
 cryptography>=42.0

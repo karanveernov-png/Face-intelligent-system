@@ -3,6 +3,7 @@ import threading
 import cv2
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.main import app
 from app.services import pipeline, recognition
@@ -54,6 +55,25 @@ def test_ws_connects_and_analyzes_one_frame(ws_token, blank_jpeg_bytes):
         assert "face_count" in result
         assert result["face_count"] == 0  # blank synthetic image, same as the REST equivalent
         assert "active_tracks" in result
+
+
+def test_ws_rejects_missing_token():
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/ws/analyze"):
+            pass
+    assert exc_info.value.code == 1008
+
+
+def test_ws_rejects_disallowed_origin(ws_token):
+    client = TestClient(app)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(
+            f"/ws/analyze?token={ws_token}",
+            headers={"Origin": "https://evil.example"},
+        ):
+            pass
+    assert exc_info.value.code == 1008
 
 
 def test_ws_rejects_decompression_bomb_frame_without_closing(ws_token, blank_jpeg_bytes):

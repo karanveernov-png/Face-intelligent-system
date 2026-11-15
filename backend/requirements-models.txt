@@ -1,0 +1,4 @@
+# Provisioning-only dependencies for backend/scripts/download_models.py.
+# Keep provisioning dependencies separate from the backend runtime dependencies.
+uniface==4.3.0
+onnxruntime==1.31.1

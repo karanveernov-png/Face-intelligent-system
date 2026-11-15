@@ -104,6 +104,11 @@ def _get_encryption_enabled() -> bool:
         return False
 
 
+def _encryption_required() -> bool:
+    """Return whether biometric embeddings must be encrypted at rest."""
+    return settings.environment == "production" or settings.encryption_key is not None
+
+
 def _encrypt_and_store_embedding(embedding: np.ndarray) -> tuple[dict | None, dict[str, Any]]:
     """
     Encrypt an embedding and return both plaintext (for model inference) and encrypted (for storage).
@@ -122,7 +127,11 @@ def _encrypt_and_store_embedding(embedding: np.ndarray) -> tuple[dict | None, di
             encrypted_data = encrypt_embedding(embedding.tolist())
             encrypted = encrypted_data.to_dict()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to encrypt embedding: %s - will store plaintext", exc)
+            logger.error("Failed to encrypt embedding: %s", exc)
+            if _encryption_required():
+                raise RuntimeError("Biometric embedding encryption failed") from exc
+    elif _encryption_required():
+        raise RuntimeError("Biometric embedding encryption is not initialized")
 
     return plaintext, encrypted
 
@@ -152,6 +161,9 @@ def _get_stored_embedding(record: dict[str, Any]) -> np.ndarray | None:
 
     # Plaintext format (legacy or unencrypted storage)
     if "embedding" in record and record["embedding"] is not None:
+        if _encryption_required():
+            logger.error("Plaintext biometric embedding rejected by current storage policy")
+            return None
         return np.array(record["embedding"], dtype=np.float64)
 
     return None
@@ -519,6 +531,10 @@ def enroll_face(face_bgr: np.ndarray, name: str, consent_confirmed: bool) -> dic
                 break
 
     if needs_migration:
+        if settings.environment == "production":
+            raise RuntimeError(
+                "Legacy plaintext embeddings require offline migration before production enrollment"
+            )
         logger.info("Detected plaintext embeddings; creating backup before encryption")
         _backup_and_migrate_embeddings(index)
         # Reload after potential migration
@@ -564,6 +580,11 @@ def _backup_and_migrate_embeddings(plaintext_index: dict[str, Any]) -> int:
     """
     import shutil
     from datetime import datetime
+
+    if settings.environment == "production":
+        raise RuntimeError(
+            "Plaintext embedding migration is disabled in production; use an offline migration process"
+        )
 
     # Create timestamped backup
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")

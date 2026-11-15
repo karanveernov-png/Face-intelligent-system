@@ -46,6 +46,8 @@ Models fetched, with the real accuracy each one actually has:
 from __future__ import annotations
 
 import sys
+import hashlib
+import json
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -59,6 +61,8 @@ BUFFALO_S_ZIP_URL = "https://github.com/deepinsight/insightface/releases/downloa
 HSEMOTION_ONNX_URL = (
     "https://github.com/sb-ai-lab/EmotiEffLib/raw/main/models/affectnet_emotions/onnx/enet_b0_8_best_vgaf.onnx"
 )
+HSEMOTION_SHA256 = "fa07e841fd06c7a67ee651ea4e6e4a3a2bb5695f47b37a7da50492526f59c898"
+MODEL_MANIFEST_PATH = MODELS_DIR / "model_manifest.json"
 
 
 
@@ -117,6 +121,9 @@ def extract_members_from_remote_zip(url: str, wanted: dict[str, Path]) -> dict[s
                     dest_path.write_bytes(zf.read(member))
                     print(f"  extracted {member} -> {dest_path.name} ({dest_path.stat().st_size / 1e6:.2f} MB)")
                     found[suffix] = dest_path
+        missing = set(wanted) - set(found)
+        if missing:
+            raise RuntimeError(f"Required archive members were not found: {', '.join(sorted(missing))}")
         return found
     except Exception as exc:
         print(f"  range-based extraction failed ({exc}); falling back to full download")
@@ -130,6 +137,9 @@ def extract_members_from_remote_zip(url: str, wanted: dict[str, Path]) -> dict[s
                         dest_path.write_bytes(zf.read(member))
                         found[suffix] = dest_path
         tmp_zip.unlink(missing_ok=True)
+        missing = set(wanted) - set(found)
+        if missing:
+            raise RuntimeError(f"Required archive members were not found: {', '.join(sorted(missing))}")
         return found
 
 
@@ -193,6 +203,45 @@ def verify_onnx_loads(path: Path) -> bool:
         return False
 
 
+def verify_file_sha256(path: Path, expected: str) -> bool:
+    digest = hashlib.sha256()
+    with path.open("rb") as model_file:
+        for chunk in iter(lambda: model_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower() == expected.lower()
+
+
+def verify_manifest_assets(
+    manifest_path: Path = MODEL_MANIFEST_PATH,
+    models_dir: Path = MODELS_DIR,
+) -> tuple[bool, list[str]]:
+    """Verify provisioned assets against the repository's pinned manifest."""
+    if not manifest_path.is_file():
+        return False, [f"Model manifest not found: {manifest_path}"]
+
+    with manifest_path.open("r", encoding="utf-8") as manifest_file:
+        manifest = json.load(manifest_file)
+
+    issues: list[str] = []
+    for entry in manifest.get("models", {}).values():
+        filename = entry["filename"]
+        path = models_dir / filename
+        if not path.is_file():
+            if entry.get("required", True):
+                issues.append(f"Required model missing: {filename}")
+            continue
+
+        actual_size = path.stat().st_size
+        if actual_size != entry["size"]:
+            issues.append(f"Size mismatch for {filename}")
+            continue
+
+        if not verify_file_sha256(path, entry["sha256"]):
+            issues.append(f"SHA-256 mismatch for {filename}")
+
+    return not issues, issues
+
+
 def main() -> None:
     ok = True
 
@@ -224,6 +273,9 @@ def main() -> None:
     hse_fp32 = MODELS_DIR / "enet_b0_8_best_vgaf.onnx"
     if not hse_fp32.is_file():
         urllib.request.urlretrieve(HSEMOTION_ONNX_URL, str(hse_fp32))
+    if hse_fp32.is_file() and not verify_file_sha256(hse_fp32, HSEMOTION_SHA256):
+        print("  FAILED: HSEmotion SHA-256 verification failed")
+        ok = False
     ok &= verify_onnx_loads(hse_fp32)
 
     print("Age (continuous) + gender: InsightFace genderage.onnx (from buffalo_l)")
@@ -253,10 +305,16 @@ def main() -> None:
         if p.is_file():
             print(f"  {p.name}: {p.stat().st_size / 1e6:.2f} MB")
 
+    manifest_ok, manifest_issues = verify_manifest_assets()
+    if not manifest_ok:
+        ok = False
+        for issue in manifest_issues:
+            print(f"  FAILED: {issue}")
+
     if not ok:
         print("\nOne or more models failed to load -- see FAILED lines above.")
         sys.exit(1)
-    print("\nAll models downloaded, quantized, and verified loadable.")
+    print("\nAll models were provisioned, manifest-verified, and loaded successfully.")
 
 
 if __name__ == "__main__":

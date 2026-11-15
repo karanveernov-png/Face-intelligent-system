@@ -17,7 +17,7 @@ from pydantic.types import SecretStr
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 MODELS_DIR = PROJECT_ROOT / 'models'
-DATA_DIR = PROJECT_ROOT / 'data'
+DATA_DIR = Path(os.environ.get("FACE_DATA_DIR", str(PROJECT_ROOT / "data"))).resolve()
 GALLERY_DIR = DATA_DIR / 'gallery'
 EMBEDDINGS_DIR = DATA_DIR / 'embeddings'
 TMP_UPLOAD_DIR = DATA_DIR / 'tmp_uploads'

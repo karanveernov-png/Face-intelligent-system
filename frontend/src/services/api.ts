@@ -7,6 +7,15 @@ import type {
   AnalyzeOptions,
 } from "../types/api";
 
+const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
+
+function authenticatedHeaders(): HeadersInit {
+  if (!API_KEY) {
+    throw new Error("VITE_API_KEY is not configured for this frontend build.");
+  }
+  return { "X-API-Key": API_KEY };
+}
+
 class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -48,7 +57,11 @@ export async function analyzeImage(
   form.append("run_recognition", String(options.run_recognition));
   form.append("run_expression", String(options.run_expression));
   form.append("run_age", String(options.run_age));
-  const res = await fetch("/api/analyze/image", { method: "POST", body: form });
+  const res = await fetch("/api/analyze/image", {
+    method: "POST",
+    headers: authenticatedHeaders(),
+    body: form,
+  });
   return parseOrThrow(res);
 }
 
@@ -61,7 +74,11 @@ export async function analyzeVideo(
   form.append("run_recognition", String(options.run_recognition));
   form.append("run_expression", String(options.run_expression));
   form.append("run_age", String(options.run_age));
-  const res = await fetch("/api/analyze/video", { method: "POST", body: form });
+  const res = await fetch("/api/analyze/video", {
+    method: "POST",
+    headers: authenticatedHeaders(),
+    body: form,
+  });
   return parseOrThrow(res);
 }
 
@@ -74,17 +91,24 @@ export async function enrollFace(
   form.append("file", file);
   form.append("name", name);
   form.append("consent_confirmed", String(consentConfirmed));
-  const res = await fetch("/api/faces/enroll", { method: "POST", body: form });
+  const res = await fetch("/api/faces/enroll", {
+    method: "POST",
+    headers: authenticatedHeaders(),
+    body: form,
+  });
   return parseOrThrow(res);
 }
 
 export async function listFaces(): Promise<EnrolledEntry[]> {
-  const res = await fetch("/api/faces");
+  const res = await fetch("/api/faces", { headers: authenticatedHeaders() });
   return parseOrThrow(res);
 }
 
 export async function deleteFace(faceId: string): Promise<void> {
-  const res = await fetch(`/api/faces/${encodeURIComponent(faceId)}`, { method: "DELETE" });
+  const res = await fetch(`/api/faces/${encodeURIComponent(faceId)}`, {
+    method: "DELETE",
+    headers: authenticatedHeaders(),
+  });
   await parseOrThrow(res);
 }
 

@@ -18,6 +18,19 @@ backend first (see the top-level `README.md`).
 during this build: `tsc -b && vite build` completes with zero type errors —
 see `CHANGELOG.md`).
 
+For a production build, provide the backend API key at build time:
+
+```powershell
+$env:VITE_API_KEY = "fi_..."
+npm run build
+```
+
+The key is embedded in the static bundle, so host this demo only for trusted
+users and rotate the key if the bundle is exposed.
+
+The backend must allow the frontend origin through its `CORS_ORIGINS` setting,
+and the WebSocket endpoint checks that origin too.
+
 ## What's here
 
 - The model status check is manual: click **Test models** in the top bar to

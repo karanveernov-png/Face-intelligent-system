@@ -338,6 +338,11 @@ def migrate_plaintext_embeddings(index_path: str, backup_path: str) -> int:
     """
     import shutil
 
+    if settings.environment == "production":
+        raise RuntimeError(
+            "Plaintext embedding migration is disabled in production; use an offline migration process"
+        )
+
     # Create backup
     shutil.copy2(index_path, backup_path)
     logger.info("Created backup at %s", backup_path)

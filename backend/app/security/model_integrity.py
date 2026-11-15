@@ -81,6 +81,10 @@ MODEL_REGISTRY = {
         "purpose": "Age & gender estimation (FairFace ensemble)",
         "required": True,
     },
+    "genderage.onnx": {
+        "purpose": "Continuous age and gender estimation (InsightFace)",
+        "required": True,
+    },
     "mobilefacenet_arcface_int8.onnx": {
         "purpose": "Face recognition fallback (MobileFaceNet INT8)",
         "required": False,
@@ -105,7 +109,7 @@ def generate_manifest(models_dir: Optional[Path] = None) -> ModelManifest:
     """
     Generate a manifest of all model files with their current hashes.
 
-    This should be run once after deploying trusted models to create
+    This should be run once after provisioning trusted models to create
     the reference manifest for future integrity checks.
     """
     if models_dir is None:

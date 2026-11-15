@@ -20,7 +20,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.routes import router
 from app.api.ws import router as ws_router
-from app.core.config import settings
+from app.core.config import DATA_DIR, MODELS_DIR, settings
 from app.security.auth import load_api_keys_from_env
 from app.security.model_integrity import verify_model_integrity, generate_manifest, save_manifest
 
@@ -113,7 +113,18 @@ async def lifespan(app: FastAPI):
         issues = settings.validate_production_config()
         if issues:
             for issue in issues:
-                app_logger.warning("Production config issue", issue=issue)
+                app_logger.error("Production config issue", issue=issue)
+            critical_issues = [
+                issue for issue in issues
+                if not issue.startswith("REDIS_URL should be set")
+            ]
+            if critical_issues:
+                raise RuntimeError(
+                    "Production configuration is invalid: "
+                    + "; ".join(critical_issues)
+                )
+        if key_count == 0:
+            raise RuntimeError("FACE_API_KEYS must define at least one API key in production")
 
     # Initialize encryption
     if settings.encryption_key:
@@ -141,8 +152,9 @@ async def lifespan(app: FastAPI):
                 raise RuntimeError(f"Model integrity verification failed: {len(issues)} issues")
             else:
                 app_logger.info("Model integrity verification passed")
-        except FileNotFoundError:
-            app_logger.warning("Model manifest not found; run model_integrity.generate to create one")
+        except FileNotFoundError as e:
+            app_logger.error("Required model integrity manifest is unavailable", error=str(e))
+            raise RuntimeError("Production model manifest is unavailable") from e
         except Exception as e:
             app_logger.error("Model integrity check error", error=str(e))
             if settings.environment == "production":
@@ -309,15 +321,15 @@ def health():
 def readiness():
     """
     Readiness check - verifies models and dependencies are loaded.
-    Used by Kubernetes readiness probe.
+    Verifies that the local application is ready to process requests.
     """
     from app.core.onnx_runtime import get_active_execution_providers
     from app.services import detection, recognition, expressions, age_estimation
 
     checks = {
         "api": "ok",
-        "models_dir": settings.MODELS_DIR.exists(),
-        "data_dir": settings.DATA_DIR.exists(),
+        "models_dir": MODELS_DIR.exists(),
+        "data_dir": DATA_DIR.exists(),
         "execution_providers": get_active_execution_providers(),
     }
 

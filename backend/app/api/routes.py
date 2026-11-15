@@ -128,6 +128,7 @@ async def analyze_image(
     run_recognition: bool = Form(True),
     run_expression: bool = Form(True),
     run_age: bool = Form(False),
+    _auth: AuthContext = Depends(require_permission(Permission.ANALYZE_IMAGE)),
 ):
     """
     Analyze an uploaded image for faces.
@@ -155,6 +156,7 @@ async def analyze_video(
     run_recognition: bool = Form(True),
     run_expression: bool = Form(True),
     run_age: bool = Form(False),
+    _auth: AuthContext = Depends(require_permission(Permission.ANALYZE_VIDEO)),
 ):
     """
     Analyze an uploaded video for faces.
@@ -227,6 +229,7 @@ async def enroll(
     path: FilePath = Depends(validated_image_upload),
     name: str = Form(...),
     consent_confirmed: bool = Form(...),
+    _auth: AuthContext = Depends(require_permission(Permission.ENROLL_FACE)),
 ):
     """
     Enroll a face into the recognition gallery.
@@ -265,7 +268,9 @@ async def enroll(
 
 
 @router.get("/api/faces", response_model=list[EnrolledEntry])
-def list_faces():
+def list_faces(
+    _auth: AuthContext = Depends(require_permission(Permission.LIST_FACES)),
+):
     """
     List all enrolled faces.
     """
@@ -275,6 +280,7 @@ def list_faces():
 @router.delete("/api/faces/{face_id}", response_model=DeleteResponse)
 def delete_face(
     face_id: str,
+    _auth: AuthContext = Depends(require_permission(Permission.DELETE_FACE)),
 ):
     """
     Delete an enrolled face from the gallery.
@@ -288,6 +294,7 @@ def delete_face(
 @router.post("/api/faces/{face_id}/withdraw-consent", response_model=WithdrawConsentResponse)
 def withdraw_consent(
     face_id: str,
+    _auth: AuthContext = Depends(require_permission(Permission.ENROLL_FACE)),
 ):
     """
     Withdraw consent for a previously enrolled face.

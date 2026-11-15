@@ -65,6 +65,15 @@ def _fake_detected_face(img_shape=(300, 300)) -> DetectedFace:
 
 # --- 1. Upload validation -------------------------------------------------
 
+def test_sensitive_rest_endpoints_require_authentication(client, blank_jpg_bytes):
+    assert client.get("/api/faces").status_code == 401
+    assert client.delete("/api/faces/does-not-exist").status_code == 401
+    assert client.post(
+        "/api/analyze/image",
+        files={"file": ("blank.jpg", blank_jpg_bytes, "image/jpeg")},
+    ).status_code == 401
+
+
 def test_analyze_image_rejects_wrong_extension(auth_client):
     resp = auth_client.post(
         "/api/analyze/image",

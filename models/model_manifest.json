@@ -30,6 +30,13 @@
       "purpose": "Age & gender estimation (FairFace ensemble)",
       "required": true
     },
+    "genderage.onnx": {
+      "filename": "genderage.onnx",
+      "sha256": "4fde69b1c810857b88c64a335084f1c3fe8f01246c9a191b48c7bb756d6652fb",
+      "size": 1322532,
+      "purpose": "Continuous age and gender estimation (InsightFace)",
+      "required": true
+    },
     "mobilefacenet_arcface_int8.onnx": {
       "filename": "mobilefacenet_arcface_int8.onnx",
       "sha256": "7caa7fb0ad6c37b33e6c59f6411084b487aaabd596bba645d2cce391a5871120",
